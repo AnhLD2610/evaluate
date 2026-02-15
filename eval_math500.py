@@ -130,7 +130,7 @@ def main():
             print(f"[{current_idx}/{len(test_examples)}] correct: {sum(sample_correct)}/{args.n}")
 
     # --- Compute pass@k (naive): solved if ANY of first k samples is correct ---
-    k_values = [k for k in [1, 4, 8, 16, 32, 64, 128] if k <= args.n]
+    k_values = sorted(set([k for k in [1, 2, 4, 8, 16, 32, 64, 128] if k <= args.n] + [args.n]))
 
     print("\n" + "=" * 60)
     print(f"MATH-500 | Model: {args.model_name} | n={args.n}")
