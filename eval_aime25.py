@@ -7,20 +7,6 @@ from vllm import LLM, SamplingParams
 import argparse
 
 
-def pass_at_k(n, c, k):
-    """
-    Estimator for pass@k.
-    n: total number of samples
-    c: number of correct samples
-    k: k value
-    """
-    if n - c < k:
-        return 1.0
-    return 1.0 - float(
-        np.prod([(n - c - i) / (n - i) for i in range(k)])
-    )
-
-
 def check_answer_aime(response, gt_answer):
     """Check if a single response is correct for AIME (integer answers)."""
     llm_answer = extract_answer_qwq(response)
@@ -80,14 +66,8 @@ def main():
         for example in batch_examples:
             prompt = example["problem"]
             tail = r" Please reason step by step, and put your final answer within \boxed{}."
-            messages = [
-                {"role": "user", "content": prompt + tail}
-            ]
-            text = tokenizer.apply_chat_template(
-                messages,
-                tokenize=False,
-                add_generation_prompt=True
-            )
+            messages = [{"role": "user", "content": prompt + tail}]
+            text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
             batch_prompts.append(text)
             batch_gt_answers.append(example["answer"])
 
@@ -95,33 +75,25 @@ def main():
 
         for j, output in enumerate(outputs):
             gt_answer = batch_gt_answers[j]
-            num_correct = 0
-            sample_details = []
+            sample_correct = []
 
             for s_idx, single_output in enumerate(output.outputs):
                 response = single_output.text
                 is_correct, prediction = check_answer_aime(response, gt_answer)
-                if is_correct:
-                    num_correct += 1
-                sample_details.append({
-                    "sample_idx": s_idx,
-                    "prediction": prediction,
-                    "is_correct": is_correct,
-                })
+                sample_correct.append(is_correct)
 
             results_per_question.append({
                 "question": batch_examples[j]["problem"],
                 "gt_answer": gt_answer,
                 "n": args.n,
-                "num_correct": num_correct,
-                "sample_details": sample_details,
+                "num_correct": sum(sample_correct),
+                "sample_correct": sample_correct,
             })
 
             current_idx = i + j + 1
-            print(f"[{current_idx}/{len(test_examples)}] correct: {num_correct}/{args.n}  "
-                  f"greedy_acc_so_far: {sum(1 for r in results_per_question if r['num_correct'] > 0)}/{current_idx}")
+            print(f"[{current_idx}/{len(test_examples)}] correct: {sum(sample_correct)}/{args.n}")
 
-    # --- Compute pass@k ---
+    # --- Compute pass@k (naive): solved if ANY of first k samples is correct ---
     k_values = [k for k in [1, 4, 8, 16, 32, 64, 128] if k <= args.n]
 
     print("\n" + "=" * 60)
@@ -130,10 +102,13 @@ def main():
 
     pass_k_results = {}
     for k in k_values:
-        scores = [pass_at_k(r["n"], r["num_correct"], k) for r in results_per_question]
-        avg = np.mean(scores)
-        pass_k_results[f"pass@{k}"] = avg
-        print(f"  pass@{k:>3d}: {avg:.4f}  ({avg*100:.2f}%)")
+        solved = 0
+        for r in results_per_question:
+            if any(r["sample_correct"][:k]):
+                solved += 1
+        acc = solved / len(results_per_question)
+        pass_k_results[f"pass@{k}"] = acc
+        print(f"  pass@{k:>3d}: {acc:.4f}  ({acc*100:.2f}%)  [{solved}/{len(results_per_question)}]")
 
     print("=" * 60)
 
