@@ -93,24 +93,19 @@ def main():
             current_idx = i + j + 1
             print(f"[{current_idx}/{len(test_examples)}] correct: {sum(sample_correct)}/{args.n}")
 
-    # --- Compute pass@k (naive): solved if ANY of first k samples is correct ---
-    k_values = sorted(set([k for k in [1, 2, 4, 8, 16, 32, 64, 128] if k <= args.n] + [args.n]))
+    # --- Compute pass@n: solved if ANY of the n samples is correct ---
+    solved = 0
+    for r in results_per_question:
+        if any(r["sample_correct"]):
+            solved += 1
+    acc = solved / len(results_per_question)
 
     print("\n" + "=" * 60)
     print(f"AIME 2025 | Model: {args.model_name} | n={args.n}")
+    print(f"  pass@{args.n}: {acc:.4f}  ({acc*100:.2f}%)  [{solved}/{len(results_per_question)}]")
     print("=" * 60)
 
-    pass_k_results = {}
-    for k in k_values:
-        solved = 0
-        for r in results_per_question:
-            if any(r["sample_correct"][:k]):
-                solved += 1
-        acc = solved / len(results_per_question)
-        pass_k_results[f"pass@{k}"] = acc
-        print(f"  pass@{k:>3d}: {acc:.4f}  ({acc*100:.2f}%)  [{solved}/{len(results_per_question)}]")
-
-    print("=" * 60)
+    pass_k_results = {f"pass@{args.n}": acc}
 
     output_path = args.output or f"aime25_pass_at_k_n{args.n}.json"
     save_data = {
